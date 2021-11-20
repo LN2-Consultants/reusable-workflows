@@ -51,25 +51,26 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Validate All
+      - name: Validate
         run: terragrunt validate --terragrunt-non-interactive --terragrunt-working-dir env/${{ inputs.terragrunt_env }}
 
-      # - uses: actions/checkout@v2
-      # - run: terragrunt validate --terragrunt-non-interactive --terragrunt-working-dir env/${{ inputs.terragrunt_env }}
-      # - id: plan
-      #   run: |
-      #     terragrunt plan -out "$PWD/planfile-${{ inputs.terragrunt_env }}" --terragrunt-non-interactive --terragrunt-working-dir env/${{ inputs.terragrunt_env }} > $PWD/plan-output.txt
-      #     cat plan-output.txt
-      #     sed -i ':a;N;$!ba;s/%/%25/g' plan-output.txt
-      #     sed -i ':a;N;$!ba;s/\n/%0A/g' plan-output.txt
-      #     sed -i ':a;N;$!ba;s/\r/%0D/g' plan-output.txt
-      #     echo "::set-output name=plan::$(cat plan-output.txt)"
-      # - uses: actions/upload-artifact@v2
-      #   if: |
-      #     !contains(steps.plan.outputs.plan,'Your infrastructure matches the configuration.')
-      #   with:
-      #     name: planfile-${{ inputs.terragrunt_env }}
-      #     path: planfile-${{ inputs.terragrunt_env }}
+      - name: Plan
+        id: plan
+        run: |
+          terragrunt plan -out "$PWD/planfile-${{ inputs.terragrunt_env }}" --terragrunt-non-interactive --terragrunt-working-dir env/${{ inputs.terragrunt_env }} > $PWD/plan-output.txt
+          cat plan-output.txt
+          sed -i ':a;N;$!ba;s/%/%25/g' plan-output.txt
+          sed -i ':a;N;$!ba;s/\n/%0A/g' plan-output.txt
+          sed -i ':a;N;$!ba;s/\r/%0D/g' plan-output.txt
+          echo "::set-output name=plan::$(cat plan-output.txt)"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v2
+        if: |
+          !contains(steps.plan.outputs.plan,'Your infrastructure matches the configuration.')
+        with:
+          name: planfile-${{ inputs.terragrunt_env }}
+          path: planfile-${{ inputs.terragrunt_env }}
 
   # terragrunt-apply:
   #   needs: [ terragrunt-validate-plan ]
