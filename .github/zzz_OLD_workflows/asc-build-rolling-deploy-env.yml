@@ -1,0 +1,75 @@
+name: Reusable workflow for a simple Deploy to Azure Spring CLoud
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      java_main_version:
+        required: true
+        type: string
+      asc_name:
+        required: true
+        type: string
+      asc_app_name:
+        required: true
+        type: string
+      asc_app_env:
+        required: true
+        type: string
+      asc_app_jvm_options:
+        required: true
+        type: string
+      azure_subscription:
+        required: true
+        type: string
+    secrets:
+      dynatrace_config:
+        required: false
+      sp_client_id:
+        required: true
+      sp_client_secret:
+        required: true
+
+jobs:
+  build-and-deploy-to-asc:
+    runs-on: [ self-hosted, Linux, hub ]
+    container:
+      image: liantisgoldenimages.azurecr.io/mvnw-nexus-mirror:2
+    environment:
+      name: ${{ inputs.environment }}
+    env:
+      #  required for the cache plugin to properly work inside containers (maven repo, via setup-java action)
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v2
+        with:
+          java-version: ${{ inputs.java_main_version }}
+          distribution: "adopt"
+          cache: "maven"
+          overwrite-settings: false
+      - run: |
+          ./mvnw --batch-mode clean package spring-boot:repackage -DskipTests -Djar.finalName=deployable-unit
+          mv target/*.jar deployable-unit.jar
+      - name: deploy to ASC
+        env:
+          ASC_NAME: ${{ inputs.asc_name }}
+          APP_RG_NAME: rg-${{ inputs.asc_name }}
+          APP_NAME: ${{ inputs.asc_app_name }}
+          APP_ENV: '${{ inputs.asc_app_env }} DT_CLUSTER_ID=ASC-${{ inputs.asc_app_name }} DT_LOGLEVELCON=error ${{ secrets.dynatrace_config }}'
+#          APP_ENV: ${{ inputs.asc_app_env }} DT_TENANT='${{ secrets.dynatrace_tenant }}' DT_TENANTTOKEN='${{ secrets.dynatrace_tenanttoken }}' DT_CONNECTION_POINT='${{ secrets.dynatrace_connectionpoint }}'
+          APP_RUNTIME_VERSION: Java_${{ inputs.java_main_version }}
+          JVM_OPTIONS: ${{ inputs.asc_app_jvm_options }}
+          AZURE_TENANT_ID: "8dbee730-91af-4ab0-9fb6-085d4a3630c1"
+#          ARTIFACT_PATH: target/${{ env.APP_NAME }}.jar
+          ARTIFACT_PATH: deployable-unit.jar
+        run: |
+          az login --service-principal -u ${{ secrets.sp_client_id }} -p ${{ secrets.sp_client_secret }} -t ${{ env.AZURE_TENANT_ID }}
+          az account set -s ${{ inputs.azure_subscription }}
+          az extension add --name spring-cloud --upgrade --yes
+          az config set extension.use_dynamic_install=yes_without_prompt
+          export ACTIVE_DEPLOYMENT=$(az spring-cloud app deployment list --app ${{ env.APP_NAME }} --resource-group ${{ env.APP_RG_NAME }} --service ${{ env.ASC_NAME }} --query '[?(properties.active)].name' -o tsv)
+          az spring-cloud app deploy --env ${{ env.APP_ENV }} --runtime-version ${{ env.APP_RUNTIME_VERSION }} --jvm-options='${{ env.JVM_OPTIONS }}' -d $ACTIVE_DEPLOYMENT -n ${{ env.APP_NAME }} -s ${{ env.ASC_NAME }} -g ${{ env.APP_RG_NAME }} --artifact-path ${{ env.ARTIFACT_PATH }}
+  #          az spring-cloud app deploy -d $ACTIVE_DEPLOYMENT -n ${{ env.APP_NAME }} -s ${{ env.ASC_NAME }} -g ${{ env.APP_RG_NAME }} --debug --artifact-path target/${{ env.APP_NAME }}.jar

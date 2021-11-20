@@ -1,0 +1,57 @@
+name: Reusable workflow for a mvnm job running on a job runner VM host (for local dependency caching)
+
+on:
+  workflow_call:
+    inputs:
+      java_main_version:
+        required: true
+        type: string
+      mvnw_base_command:
+        required: true
+        type: string
+
+jobs:
+  mvnw:
+    runs-on: [ self-hosted, Linux, hub ]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-java@v2
+        with:
+          java-version: ${{ inputs.java_main_version }}
+          distribution: "adopt"
+      - name: Create default settings.xml with nexus mirror and snapshots enabled
+        run: |
+          cat > /root/.m2/settings.xml << EOF
+          <settings>
+              <interactiveMode>false</interactiveMode>
+              <mirrors>
+                  <mirror>
+                      <id>Nexus</id>
+                      <name>Nexus Public Mirror</name>
+                      <mirrorOf>*</mirrorOf>
+                      <url>https://nexus.liantis.be/nexus/content/groups/public</url>
+                  </mirror>
+              </mirrors>
+              <profiles>
+                  <profile>
+                      <id>common</id>
+                      <activation>
+                          <activeByDefault>true</activeByDefault>
+                      </activation>
+                      <repositories>
+                          <repository>
+                              <id>central</id>
+                              <url>http://central</url>
+                              <releases>
+                                  <enabled>true</enabled>
+                              </releases>
+                              <snapshots>
+                                  <enabled>true</enabled>
+                              </snapshots>
+                          </repository>
+                      </repositories>
+                  </profile>
+              </profiles>
+          </settings>
+          EOF
+      - run: ./mvnw ${{ inputs.mvnw_base_command }} --batch-mode --errors --fail-at-end --show-version
