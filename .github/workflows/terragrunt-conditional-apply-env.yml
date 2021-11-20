@@ -31,9 +31,6 @@ jobs:
       TERRAFORM_VERSION: 1.0.2
       TERRAGRUNT_VERSION: 0.31.0
 
-    # container:
-    #   image: liantisgoldenimages.azurecr.io/terragrunt:2
-
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
 
@@ -72,23 +69,47 @@ jobs:
           name: planfile-${{ inputs.terragrunt_env }}
           path: planfile-${{ inputs.terragrunt_env }}
 
-  # terragrunt-apply:
-  #   needs: [ terragrunt-validate-plan ]
-  #   runs-on: [ self-hosted, Linux, terraform, hub, golden-images ]
-  #   container:
-  #     image: liantisgoldenimages.azurecr.io/terragrunt:2
-  #   if: |
-  #     !contains(needs.terragrunt-validate-plan.outputs.plan,'Your infrastructure matches the configuration.')
-  #   env:
-  #     ARM_TENANT_ID: "8dbee730-91af-4ab0-9fb6-085d4a3630c1"
-  #     ARM_CLIENT_ID: ${{ secrets.sp_client_id }}
-  #     ARM_CLIENT_SECRET: ${{ secrets.sp_client_secret }}
-  #   environment:
-  #     name: ${{ inputs.terragrunt_env }}
-  #   steps:
-  #     - run: echo "${{ secrets.terraform-modules-ssh-key }}" | tr -d '\r' > /root/.ssh/id_rsa  && chmod 600 /root/.ssh/id_rsa
-  #     - uses: actions/checkout@v2
-  #     - uses: actions/download-artifact@v2
-  #       with:
-  #         name: planfile-${{ inputs.terragrunt_env }}
-  #     - run: terragrunt apply -auto-approve "$PWD/planfile-${{ inputs.terragrunt_env }}" --terragrunt-non-interactive --terragrunt-working-dir env/${{ inputs.terragrunt_env }}
+  terragrunt-apply:
+    needs: [ terragrunt-validate-plan ]
+
+    runs-on: ubuntu-latest
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    if: |
+      !contains(needs.terragrunt-validate-plan.outputs.plan,'Your infrastructure matches the configuration.')
+      
+    env:
+      ARM_TENANT_ID: ${{ secrets.sp_tenat_id }}
+      ARM_CLIENT_ID: ${{ secrets.sp_client_id }}
+      ARM_CLIENT_SECRET: ${{ secrets.sp_client_secret }}
+      TERRAFORM_VERSION: 1.0.2
+      TERRAGRUNT_VERSION: 0.31.0
+
+    environment:
+      name: ${{ inputs.terragrunt_env }}
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@master
+
+      - name: Install Terragrunt
+        uses: peter-murray/terragrunt-github-action@v1.0.0
+        with:
+          terragrunt_version: ${{ env.TERRAGRUNT_VERSION }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: planfile-${{ inputs.terragrunt_env }}
+
+      - name: Apply
+        run: terragrunt apply -auto-approve "$PWD/planfile-${{ inputs.terragrunt_env }}" --terragrunt-non-interactive --terragrunt-working-dir env/${{ inputs.terragrunt_env }}
