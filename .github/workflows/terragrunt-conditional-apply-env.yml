@@ -1,4 +1,4 @@
-name: Reusable workflow for terragrunt validate-plan + conditional apply for a specific environment
+name: Reusable workflow for terragrunt for a specific environment
 
 on:
   workflow_call:
