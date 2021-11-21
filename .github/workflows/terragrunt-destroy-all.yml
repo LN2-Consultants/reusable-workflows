@@ -1,0 +1,46 @@
+name: Reusable workflow for terragrunt destroy for a all environments
+
+on:
+  workflow_call:
+    secrets:
+      sp_client_id:
+        required: true
+      sp_client_secret:
+        required: true
+
+jobs:
+  terragrunt-validate-destroy-all:
+    runs-on: ubuntu-latest
+
+    # Use the Bash shell regardless whether the GitHub Actions runner is ubuntu-latest, macos-latest, or windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.sp_client_id }}
+      ARM_CLIENT_SECRET: ${{ secrets.sp_client_secret }}
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+      TERRAFORM_VERSION: 1.0.2
+      TERRAGRUNT_VERSION: 0.31.0
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@master
+
+      - name: Install Terragrunt
+        uses: peter-murray/terragrunt-github-action@v1.0.0
+        with:
+          terragrunt_version: ${{ env.TERRAGRUNT_VERSION }}
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+# to be checked
+      - name: Destroy
+        run: terragrunt run-all destroy --terragrunt-non-interactive --terragrunt-working-dir env
+
+      # - name: Plan
+      #   run: terragrunt run-all plan --terragrunt-non-interactive --terragrunt-parallelism 1 --terragrunt-working-dir env
